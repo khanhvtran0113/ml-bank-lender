@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
+import openai_helper
 
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:3000"])
@@ -42,6 +43,20 @@ def add_lendee():
     db.session.commit()
     return jsonify({"message": "Lendee added successfully!", "lendee": new_lendee.to_dict()}), 201
 csrf.exempt(add_lendee)
+
+@app.route("/upload", methods=["POST"])
+def upload_file():
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files["file"]
+    response = openai_helper.upload_pdf_to_openai(file)
+    return jsonify(response)
+
+@app.route("/api/lendees", methods=["GET"])
+def get_lendees():
+    lendees = Lendee.query.all()
+    return jsonify({"lendees": [lendee.to_dict() for lendee in lendees]})
 
 if __name__ == '__main__':
     app.run(debug=True)
