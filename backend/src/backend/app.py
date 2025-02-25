@@ -6,6 +6,7 @@ from models import db, Lendee, BankStatement
 import openai_helper
 import utils
 
+
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:3000"])
 csrf = CSRFProtect(app)
@@ -79,7 +80,9 @@ def get_verdict():
     if not utils.check_user_and_statements(lendee_name):
         return jsonify({"error": "User not found or no bank statements available"}), 404
 
-    return jsonify({"message": "User validated successfully!"})
+    response = utils.query_for_verdict(lendee_name)
+    return response, 200
+
 csrf.exempt(get_verdict)
 
 if __name__ == '__main__':
