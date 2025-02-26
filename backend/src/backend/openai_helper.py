@@ -2,6 +2,7 @@ import openai
 import os
 import requests
 import time
+import json
 from dotenv import load_dotenv
 
 load_dotenv()  # Load API keys from .env file
@@ -44,6 +45,8 @@ def attach_files_to_thread(thread_id, file_ids):
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code != 200:
         print(f"Failed to attach file {file_ids}: {response.text}")
+        return response.text
+    return None
 
 def send_message_to_assistant(thread_id, query):
     """Send a message to OpenAI Assistant within the internal thread."""
@@ -91,6 +94,6 @@ def get_assistant_response(thread_id):
 
             if "text" in content and "value" in content["text"]:
                 response = content["text"]["value"]
-                return response  # Return the response text
+                return response # Return the response text
 
         time.sleep(1)
