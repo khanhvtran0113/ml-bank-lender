@@ -14,6 +14,22 @@ def check_user_and_statements(lendee_name):
         return False
     return db.session.query(BankStatement.lendee_name).filter_by(lendee_name=lendee_name).count() > 0
 
+def get_or_create_thread(lendee_name):
+    """Retrieve an existing thread for the lendee or create a new one."""
+    lendee = Lendee.query.filter_by(name=lendee_name).first()
+
+    if lendee and lendee.thread_id:
+        return lendee.thread_id  # Return existing thread ID
+
+    # If no thread exists, create a new one
+    thread_id = openai_helper.create_openai_thread()
+
+    # Save thread_id in the database
+    if lendee:
+        lendee.thread_id = thread_id
+        db.session.commit()
+
+
 def query_for_verdict(lendee_name):
     bank_statements = BankStatement.query.filter_by(lendee_name=lendee_name).all()
 
@@ -21,7 +37,7 @@ def query_for_verdict(lendee_name):
     file_ids = [statement.file_id for statement in bank_statements]
 
     # Pass all file_ids to assistant
-    thread_id = openai_helper.create_openai_thread()
+    thread_id = get_or_create_thread(lendee_name)
     if not thread_id:
         return jsonify({"error": "Failed to create OpenAI thread"}), 500
     file_attachment_error = openai_helper.attach_files_to_thread(thread_id, file_ids)
@@ -43,9 +59,9 @@ def query_for_verdict(lendee_name):
     ### Important Instructions:
     - **Do NOT include citations, footnotes, or source markers (e.g.,  ) in your - **Only return a clean JSON object without any additional formatting.**
     - **Extract and use information from ALL uploaded files but do NOT attempt to reference them using in-text citations.**
+    - **Make the output a JSON string, such that I can run json.loads(output) to index into the "pros_cons" list.**
     
     **Output Format:**
-    ```json
     {{
     "valid_documents": <true/false>,
     "reason": "<Explanation if unrelated>",
@@ -54,10 +70,20 @@ def query_for_verdict(lendee_name):
         "cons": [<List of financial weaknesses>]
         }}
     }}
-    ```
     """)
     openai_helper.send_message_to_assistant(thread_id, query)
 
-    # Retrieve response from JSON
-    response = openai_helper.get_assistant_response(thread_id)
+    # Retrieve response
+    response = openai_helper.get_assistant_verdict(thread_id)
+    return response
+
+def query_for_graph_stats(lendee_name):
+    # Get existing lendee thread_id
+    thread_id = get_or_create_thread(lendee_name)
+
+    query = ("""
+        Pass 
+    """)
+    # Retrieve response
+    response = openai_helper.get_assistant_graph_stats(thread_id)
     return response

@@ -103,13 +103,22 @@ def get_verdict():
         return jsonify({"error": "User not found or no bank statements available"}), 404
 
     response = utils.query_for_verdict(lendee_name)
-    return response
-    """
+
     if response["valid_documents"] == False:
-        return jsonify({"error": response["reason"]})
+        return jsonify({"error": response["reason"]}), 400
     return response["pros_cons"], 200
-    """
 csrf.exempt(get_verdict)
+
+@app.route("/graph_stats", methods=["POST"])
+def graph_stats():
+    data = request.json
+    lendee_name = data.get("lendee_name")
+
+    # Doesn't perform checks on lendee_name or bank statements due to being called in conjunction with get_verdict()
+    response = utils.query_for_graph_stats(lendee_name)
+
+
+csrf.exempt(graph_stats)
 
 if __name__ == '__main__':
     app.run(debug=True)

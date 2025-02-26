@@ -69,7 +69,7 @@ def create_run(thread_id):
     requests.post(url, headers=headers, json=payload)
 
 
-def get_assistant_response(thread_id):
+def get_assistant_verdict(thread_id):
     """Retrieve the assistant's response from OpenAI."""
     url = f"https://api.openai.com/v1/threads/{thread_id}/messages"
     headers = {"Authorization": f"Bearer {openai.api_key}", "OpenAI-Beta": "assistants=v2"}
@@ -94,6 +94,9 @@ def get_assistant_response(thread_id):
 
             if "text" in content and "value" in content["text"]:
                 response = content["text"]["value"]
-                return response # Return the response text
+                return json.loads(response) # Return the response text
 
         time.sleep(1)
+
+def get_assistant_graph_stats(thread_id):
+    pass

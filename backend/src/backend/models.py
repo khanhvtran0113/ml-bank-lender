@@ -4,8 +4,10 @@ db = SQLAlchemy()
 
 class Lendee(db.Model):
     name = db.Column(db.String(100), primary_key=True)  # Name as primary key
+    thread_id = db.Column(db.String(100), unique=True, nullable=True)  # Store assistant thread ID
     def to_dict(self):
         return {"name": self.name,
+                "thread_id": self.thread_id,
                 "bank_statements": [statement.to_dict() for statement in self.bank_statements]}
 
 class BankStatement(db.Model):
