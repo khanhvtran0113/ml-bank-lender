@@ -14,19 +14,16 @@ BALANCE_ASSISTANT_ID = os.getenv("BALANCE_ASSISTANT_ID")
 # Store uploaded file IDs
 uploaded_file_id = None
 
-def upload_pdf_to_openai(file):
+def upload_pdf_to_openai(file_stream):
     """Uploads a PDF file to OpenAI Assistants API and stores the file ID."""
     global uploaded_file_id
-    file_stream = file.stream
 
     file_response = openai.files.create(
         file=("document.pdf", file_stream, "application/pdf"),  # Correct format
         purpose="assistants"
     )
 
-    uploaded_file_id = file_response.id
-    return {"message": "File uploaded successfully!", "file_id": uploaded_file_id}
-
+    return file_response.id
 def create_openai_thread():
     """Creates an internal conversation thread with OpenAI Assistant."""
     url = "https://api.openai.com/v1/threads"
@@ -35,6 +32,18 @@ def create_openai_thread():
     response = requests.post(url, headers=headers)
     if response.status_code == 200:
         return response.json()["id"]
+    return None
+
+def attach_file_to_thread(thread_id, file_id):
+    """Attach bank statements to the OpenAI thread (internal process)."""
+    url = f"https://api.openai.com/v1/threads/{thread_id}/messages"
+    headers = {"Authorization": f"Bearer {openai.api_key}", "Content-Type": "application/json", "OpenAI-Beta": "assistants=v2"}
+
+    payload = {"attachments": [{"file_id": file_id, "tools": [{"type": "file_search"}]}], "role": "user", "content": f"Attaching file {file_id}",}
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code != 200:
+        print(f"Failed to attach file {file_id}: {response.text}")
+        return response.text
     return None
 
 def attach_files_to_thread(thread_id, file_ids):
@@ -100,8 +109,8 @@ def get_assistant_verdict(thread_id, run_id):
         response_data = response.json()
         for item in response_data.get("data", []):
             if item.get("role") == "assistant" and item.get("run_id") == run_id:
-                print("found it boy")
                 content = item.get("content", [])
+                print("it was found")
                 if content:
                     content = content[0]
                     if "text" in content and "value" in content["text"]:
@@ -111,3 +120,17 @@ def get_assistant_verdict(thread_id, run_id):
                         except:
                             continue
         time.sleep(5)
+
+def delete_assistant_thread(thread_id):
+    """Deletes an OpenAI Assistant thread"""
+    url = f"https://api.openai.com/v1/threads/{thread_id}"
+    headers = {"Authorization": f"Bearer {openai.api_key}"}
+
+    response = requests.delete(url, headers=headers)
+
+    if response.status_code == 200:
+        print(f"Thread {thread_id} successfully deleted.")
+        return True
+    else:
+        print(f"Failed to delete thread {thread_id}: {response.text}")
+        return False

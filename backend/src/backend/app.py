@@ -5,8 +5,14 @@ from flask_wtf.csrf import CSRFProtect
 from models import db, Lendee, BankStatement
 import openai_helper
 import utils
+import openai
 import json
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
+SUMMARIZING_ASSISTANT_ID = os.getenv("SUMMARIZING_ASSISTANT_ID")
+BALANCE_ASSISTANT_ID = os.getenv("BALANCE_ASSISTANT_ID")
 
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:3000"])
@@ -24,6 +30,15 @@ with app.app_context():
 
 @app.route('/')
 def home():
+    all_threads = openai.beta.threads.list()
+    for thread in all_threads:
+        if thread["assistant_id"] == SUMMARIZING_ASSISTANT_ID or thread["assistant_id"] == BALANCE_ASSISTANT_ID:
+            try:
+                openai.beta.threads.delete(thread["id"])
+                print(f"Deleted thread {thread["id"]}")
+            except Exception as e:
+                print(f"Error deleting thread {thread["id"]}: {e}")
+
     return jsonify({"message": "Welcome to the Loan Management API!"})
 
 # Route to add a new lendee
@@ -59,35 +74,69 @@ def get_all_bank_statements():
 
 @app.route("/upload", methods=["POST"])
 def upload_files():
+    # Get the uploaded file and lendee name
     if "file" not in request.files or "lendee_name" not in request.form:
         return jsonify({"error": "File and lendee name are required"}), 400
-
-    files = request.files.getlist("file")  # Get multiple files
+    files = request.files.getlist("file")
+    file = files[0]
     lendee_name = request.form["lendee_name"]
 
     lendee = Lendee.query.filter_by(name=lendee_name).first()
     if not lendee:
         return jsonify({"error": "Lendee not found"}), 404
 
-    uploaded_files = []
+    # Check if the lendee already has a bank statement
+    if lendee.bank_statement:
+        # If a statement exists, delete it before adding a new one
+        db.session.delete(lendee.bank_statement)
+        db.session.commit()
 
-    for file in files:
-        response = openai_helper.upload_pdf_to_openai(file)
+    # Upload entire pdf and store that in database
+    file_id = openai_helper.upload_pdf_to_openai(file)
+    new_statement = BankStatement(
+        filename=file.filename,
+        file_id=file_id
+    )
+    db.session.add(new_statement)
+    db.session.commit()
+    lendee.bank_statement_id = new_statement.id
+    db.session.commit()
 
-        # Store in database
-        new_statement = BankStatement(
-            filename=file.filename,
-            file_id=response["file_id"],  # Store OpenAI's file ID
-            lendee_name=lendee_name
-        )
-        db.session.add(new_statement)
-        uploaded_files.append(new_statement.to_dict())  # Append file info
+    print("QUERY FOR VERDICT")
+    # Query for verdict
+    response = utils.query_for_verdict(file_id)
+    if response["valid_documents"] == False:
+        return jsonify({"error": response["reason"]}), 400
 
+    print("STORING VERDICT IN DATABASE")
+    # Store verdict in database
+    lendee.verdict_json = json.dumps(response["pros_cons"])
+    db.session.commit()
+
+    print("SPLITTING PAGES")
+    # Get list of byte streams for each page
+    pages = utils.split_pdf_pages(file)
+
+    # Get list of media ids from open ai
+    page_ids = [openai_helper.upload_pdf_to_openai(page) for page in pages]
+
+    print("CREATING THREADS FOR EACH PAGE")
+    # Create threads
+    thread_ids = [utils.create_thread() for _ in page_ids]
+
+    # Attach media to all the threads
+    for thread, page_id in zip(thread_ids, page_ids):
+        utils.attach_media(thread, page_id)
+
+    merged_balances = utils.query_for_balance(thread_ids)
+    print(merged_balances)
+    print("MERGED BALANCES")
+    # Store the combined results in the database
+    lendee.balance_json = json.dumps(merged_balances)
     db.session.commit()
 
     return jsonify({
-        "message": "Files uploaded successfully!",
-        "bank_statements": uploaded_files
+        "message": "Files uploaded successfully!"
     }), 201
 csrf.exempt(upload_files)
 
@@ -131,15 +180,6 @@ def get_lendee_data(lendee_name):
     }
 
     return jsonify(lendee_data), 200
-@app.route("/graph_BOT", methods=["POST"])
-def graph_BOT():
-    data = request.json
-    lendee_name = data.get("lendee_name")
-
-    # Doesn't perform checks on lendee_name or bank statements due to being called in conjunction with get_verdict()
-    response = utils.all_balances_over_time(lendee_name)
-    return response["balances"], 200
-csrf.exempt(graph_BOT)
 
 if __name__ == '__main__':
     app.run(debug=True)
