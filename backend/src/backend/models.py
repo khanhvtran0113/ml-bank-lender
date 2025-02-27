@@ -4,11 +4,17 @@ db = SQLAlchemy()
 
 class Lendee(db.Model):
     name = db.Column(db.String(100), primary_key=True)  # Name as primary key
-    thread_id = db.Column(db.String(100), unique=True, nullable=True)  # Store assistant thread ID
+    verdict_json = db.Column(db.Text, nullable=True)  # Stores verdict output JSON
+    balance_json = db.Column(db.Text, nullable=True)  # Stores balance over time JSON
+    bank_statements = db.relationship("BankStatement", backref="lendee", lazy=True)
+
     def to_dict(self):
-        return {"name": self.name,
-                "thread_id": self.thread_id,
-                "bank_statements": [statement.to_dict() for statement in self.bank_statements]}
+        """Convert Lendee object to a dictionary for API response."""
+        return {
+            "name": self.name,
+            "verdict_json": self.verdict_json if self.verdict_json else None,
+            "balance_json": self.balance_json if self.balance_json else None
+        }
 
 class BankStatement(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)

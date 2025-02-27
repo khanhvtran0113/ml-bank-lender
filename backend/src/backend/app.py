@@ -99,26 +99,47 @@ def get_verdict():
     if not lendee_name:
         return jsonify({"error": "Missing lendee name"}), 400
 
+    lendee = Lendee.query.filter_by(name=lendee_name).first()
+
     if not utils.check_user_and_statements(lendee_name):
         return jsonify({"error": "User not found or no bank statements available"}), 404
 
     response = utils.query_for_verdict(lendee_name)
-
     if response["valid_documents"] == False:
         return jsonify({"error": response["reason"]}), 400
+
+    # Store verdict in database
+    lendee.verdict_json = json.dumps(response["pros_cons"])
+    db.session.commit()
+
     return response["pros_cons"], 200
 csrf.exempt(get_verdict)
 
-@app.route("/graph_stats", methods=["POST"])
-def graph_stats():
+@app.route("/lendees/<string:lendee_name>", methods=["GET"])
+def get_lendee_data(lendee_name):
+    """Retrieve all stored information for a given lendee."""
+    lendee = Lendee.query.filter_by(name=lendee_name).first()
+
+    if not lendee:
+        return jsonify({"error": "Lendee not found"}), 404
+
+    # Convert stored JSON strings back into dictionaries before returning
+    lendee_data = {
+        "name": lendee.name,
+        "verdict_json": json.loads(lendee.verdict_json) if lendee.verdict_json else None,
+        "balance_json": json.loads(lendee.balance_json) if lendee.balance_json else None
+    }
+
+    return jsonify(lendee_data), 200
+@app.route("/graph_BOT", methods=["POST"])
+def graph_BOT():
     data = request.json
     lendee_name = data.get("lendee_name")
 
     # Doesn't perform checks on lendee_name or bank statements due to being called in conjunction with get_verdict()
-    response = utils.query_for_graph_stats(lendee_name)
-
-
-csrf.exempt(graph_stats)
+    response = utils.all_balances_over_time(lendee_name)
+    return response["balances"], 200
+csrf.exempt(graph_BOT)
 
 if __name__ == '__main__':
     app.run(debug=True)

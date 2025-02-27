@@ -8,7 +8,8 @@ from dotenv import load_dotenv
 load_dotenv()  # Load API keys from .env file
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
-ASSISTANT_ID = os.getenv("OPENAI_ASSISTANT_ID")
+SUMMARIZING_ASSISTANT_ID = os.getenv("SUMMARIZING_ASSISTANT_ID")
+BALANCE_ASSISTANT_ID = os.getenv("BALANCE_ASSISTANT_ID")
 
 # Store uploaded file IDs
 uploaded_file_id = None
@@ -48,7 +49,7 @@ def attach_files_to_thread(thread_id, file_ids):
         return response.text
     return None
 
-def send_message_to_assistant(thread_id, query):
+def send_message_to_assistant(thread_id, query, assistant_type):
     """Send a message to OpenAI Assistant within the internal thread."""
     url = f"https://api.openai.com/v1/threads/{thread_id}/messages"
     headers = {"Authorization": f"Bearer {openai.api_key}", "Content-Type": "application/json", "OpenAI-Beta": "assistants=v2"}
@@ -57,19 +58,34 @@ def send_message_to_assistant(thread_id, query):
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code != 200:
         print("Error sending message:", response.text)
+    if assistant_type == "summarizing":
+        run_id = create_summarizing_run(thread_id)
+    elif assistant_type == "balancing":
+        run_id = create_balance_run(thread_id)
+    return run_id
 
-    create_run(thread_id)
-
-def create_run(thread_id):
-    """Create a run to process the assistant response."""
+def create_summarizing_run(thread_id):
+    """Create a run to process the assistant response when generating pros and cons OR user Q & A."""
     url = f"https://api.openai.com/v1/threads/{thread_id}/runs"
     headers = {"Authorization": f"Bearer {openai.api_key}", "Content-Type": "application/json", "OpenAI-Beta": "assistants=v2"}
-    payload = {"assistant_id": ASSISTANT_ID}
+    payload = {
+        "assistant_id": SUMMARIZING_ASSISTANT_ID
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    return response.json().get("id")
 
-    requests.post(url, headers=headers, json=payload)
+def create_balance_run(thread_id):
+    """Create a run to process the assistant response when generating balances over time."""
+    url = f"https://api.openai.com/v1/threads/{thread_id}/runs"
+    headers = {"Authorization": f"Bearer {openai.api_key}", "Content-Type": "application/json", "OpenAI-Beta": "assistants=v2"}
+    payload = {
+        "assistant_id": BALANCE_ASSISTANT_ID
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    return response.json().get("id")
 
 
-def get_assistant_verdict(thread_id):
+def get_assistant_verdict(thread_id, run_id):
     """Retrieve the assistant's response from OpenAI."""
     url = f"https://api.openai.com/v1/threads/{thread_id}/messages"
     headers = {"Authorization": f"Bearer {openai.api_key}", "OpenAI-Beta": "assistants=v2"}
@@ -82,21 +98,16 @@ def get_assistant_verdict(thread_id):
             return None
 
         response_data = response.json()
-
-        # Find the assistant's response dynamically
-        assistant_response = next(
-            (item for item in response_data.get("data", []) if item.get("assistant_id") == ASSISTANT_ID and item.get("content")),
-            None
-        )
-
-        if assistant_response:
-            content = assistant_response["content"][0]  # First content item
-
-            if "text" in content and "value" in content["text"]:
-                response = content["text"]["value"]
-                return json.loads(response) # Return the response text
-
-        time.sleep(1)
-
-def get_assistant_graph_stats(thread_id):
-    pass
+        for item in response_data.get("data", []):
+            if item.get("role") == "assistant" and item.get("run_id") == run_id:
+                print("found it boy")
+                content = item.get("content", [])
+                if content:
+                    content = content[0]
+                    if "text" in content and "value" in content["text"]:
+                        response = content["text"]["value"]
+                        try:
+                            return json.loads(response)  # Convert response to JSON
+                        except:
+                            continue
+        time.sleep(5)
