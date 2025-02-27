@@ -4,9 +4,9 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "./Select"
+} from "./Select";
 
-export function SelectHero() {
+export function LendeeSelector() {
   const data = [
     {
       value: "dress-shirt-striped",
@@ -28,7 +28,7 @@ export function SelectHero() {
       value: "dress-shirt-check",
       label: "Check Dress Shirt",
     },
-  ]
+  ];
 
   return (
     <Select>
@@ -43,5 +43,5 @@ export function SelectHero() {
         ))}
       </SelectContent>
     </Select>
-  )
+  );
 }
