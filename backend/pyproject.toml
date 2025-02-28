@@ -10,6 +10,15 @@ requires-python = ">=3.12"
 dependencies = [
     "flask (>=3.1.0,<4.0.0)",
     "flask-cors (>=5.0.0,<6.0.0)",
+    "sqlalchemy (>=2.0.38,<3.0.0)",
+    "flask-sqlalchemy (>=3.1.1,<4.0.0)",
+    "flask-wtf (>=1.2.2,<2.0.0)",
+    "openai (>=1.65.1,<2.0.0)",
+    "requests (>=2.32.3,<3.0.0)",
+    "dotenv (>=0.9.9,<0.10.0)",
+    "fitz (>=0.0.1.dev2,<0.0.2)",
+    "frontend (>=0.0.3,<0.0.4)",
+    "tools (>=0.1.9,<0.2.0)",
 ]
 
 [tool.poetry]
