@@ -7,6 +7,7 @@ class Lendee(db.Model):
     verdict_json = db.Column(db.Text, nullable=True)  # Stores verdict output JSON
     balance_json = db.Column(db.Text, nullable=True)  # Stores balance over time JSON
     bank_statement_id = db.Column(db.Integer, db.ForeignKey("bank_statement.id"), unique=True, nullable=True)
+    interactive_thread_id = db.Column(db.String(255), unique=True, nullable=True)  # Store thread ID
 
     # One-to-One relationship
     bank_statement = db.relationship("BankStatement", backref="lendee", uselist=False)
@@ -17,8 +18,10 @@ class Lendee(db.Model):
             "name": self.name,
             "verdict_json": self.verdict_json if self.verdict_json else None,
             "balance_json": self.balance_json if self.balance_json else None,
-            "bank_statement": self.bank_statement.to_dict() if self.bank_statement else None
+            "bank_statement": self.bank_statement.to_dict() if self.bank_statement else None,
+            "interactive_thread_id": self.interactive_thread_id if self.interactive_thread_id else None
         }
+
 
 class BankStatement(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)

@@ -10,9 +10,28 @@ load_dotenv()  # Load API keys from .env file
 openai.api_key = os.getenv("OPENAI_API_KEY")
 SUMMARIZING_ASSISTANT_ID = os.getenv("SUMMARIZING_ASSISTANT_ID")
 BALANCE_ASSISTANT_ID = os.getenv("BALANCE_ASSISTANT_ID")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Store uploaded file IDs
 uploaded_file_id = None
+client = openai.Client(api_key=OPENAI_API_KEY)
+
+def run_thread_until_success(thread_id, assitant_type):
+    while True:
+        run_id = create_run(thread_id, assitant_type)
+        while True:
+            run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run_id)
+            if run.status == "failed" or run.status == "cancelling" or run.status == "cancelled" or run.status == "expired" or run.status == "requires_action":
+                print("RESTARTING RUN")
+                # Cancel run and restart
+                client.beta.threads.runs.cancel(thread_id=thread_id, run_id=run_id)
+                break
+            if run.status == "completed":
+                print("RUN COMPLETED")
+                return run_id
+            print("RUN LOADING")
+            time.sleep(5)
+
 
 def upload_pdf_to_openai(file_stream):
     """Uploads a PDF file to OpenAI Assistants API and stores the file ID."""
@@ -58,6 +77,18 @@ def attach_files_to_thread(thread_id, file_ids):
         return response.text
     return None
 
+def send_message(thread_id, query):
+    """Send a message to OpenAI Assistant within the internal thread."""
+    url = f"https://api.openai.com/v1/threads/{thread_id}/messages"
+    headers = {"Authorization": f"Bearer {openai.api_key}", "Content-Type": "application/json", "OpenAI-Beta": "assistants=v2"}
+
+    payload = {"role": "user", "content": query}
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code != 200:
+        print("Error sending message:", response.text)
+    return response
+
+
 def send_message_to_assistant(thread_id, query, assistant_type):
     """Send a message to OpenAI Assistant within the internal thread."""
     url = f"https://api.openai.com/v1/threads/{thread_id}/messages"
@@ -94,8 +125,28 @@ def create_balance_run(thread_id):
     return response.json().get("id")
 
 
-def get_assistant_verdict(thread_id, run_id):
-    """Retrieve the assistant's response from OpenAI."""
+def create_run(thread_id, assistant_type):
+    if assistant_type == "summarizing":
+        run_id = create_summarizing_run(thread_id)
+    elif assistant_type == "balancing":
+        run_id = create_balance_run(thread_id)
+    return run_id
+
+def delete_openai_file(file_id):
+    """Deletes an uploaded file from OpenAI."""
+    url = f"https://api.openai.com/v1/files/{file_id}"
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}"
+    }
+
+    response = requests.delete(url, headers=headers)
+
+    if response.status_code == 200:
+        print(f"File {file_id} successfully deleted.")
+    else:
+        print(f"Error deleting file {file_id}: {response.text}")
+
+def get_message_from_run(thread_id, run_id, assitant_type):
     url = f"https://api.openai.com/v1/threads/{thread_id}/messages"
     headers = {"Authorization": f"Bearer {openai.api_key}", "OpenAI-Beta": "assistants=v2"}
 
@@ -118,8 +169,48 @@ def get_assistant_verdict(thread_id, run_id):
                         try:
                             return json.loads(response)  # Convert response to JSON
                         except:
+                            print("failed to json.load")
+                            send_message(thread_id, "That was not valid JSON. Only respond with valid json.")
+                            run = run_thread_until_success(thread_id, assitant_type)
+                            run_id = run
                             continue
         time.sleep(5)
+
+def get_message_from_interactive_run(thread_id, run_id):
+    url = f"https://api.openai.com/v1/threads/{thread_id}/messages"
+    headers = {"Authorization": f"Bearer {openai.api_key}", "OpenAI-Beta": "assistants=v2"}
+
+    while True:
+        response = requests.get(url, headers=headers)
+
+        if response.status_code != 200:
+            print("Error retrieving messages:", response.text)
+            return None
+
+        response_data = response.json()
+        for item in response_data.get("data", []):
+            if item.get("role") == "assistant" and item.get("run_id") == run_id:
+                content = item.get("content", [])
+                print("it was found")
+                if content:
+                    content = content[0]
+                    if "text" in content and "value" in content["text"]:
+                        response = content["text"]["value"]
+                        return response
+def delete_openai_file(file_id):
+    """Deletes an uploaded file from OpenAI."""
+    url = f"https://api.openai.com/v1/files/{file_id}"
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}"
+    }
+
+    response = requests.delete(url, headers=headers)
+
+    if response.status_code == 200:
+        print(f"File {file_id} successfully deleted.")
+    else:
+        print(f"Error deleting file {file_id}: {response.text}")
+
 
 def delete_assistant_thread(thread_id):
     """Deletes an OpenAI Assistant thread"""

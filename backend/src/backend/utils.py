@@ -50,15 +50,7 @@ def attach_media(thread_id, file_id):
     if file_attachment_error:
         return jsonify({"error": file_attachment_error}), 500
 
-def query_for_verdict(file_id):
-    # Pass all file_ids to assistant
-    thread_id = openai_helper.create_openai_thread()
-    if not thread_id:
-        return jsonify({"error": "Failed to create OpenAI thread"}), 500
-    file_attachment_error = openai_helper.attach_file_to_thread(thread_id, file_id)
-    if file_attachment_error:
-        return jsonify({"error": file_attachment_error}), 500
-
+def query_for_verdict(thread_id):
     # Send query to assistant to analyze bank statements
     query = (f"""
     You are an AI financial analyst responsible for reviewing bank statements from a small business requesting a loan.
@@ -81,75 +73,53 @@ def query_for_verdict(file_id):
     "query_flag": "verdict",
     "valid_documents": <true/false>,
     "reason": "<Explanation if unrelated or irrelevant documents>",
-    "currency": "<currency of balance>",
     "pros_cons": {{
+        "currency": "<currency of balance>",
         "pros": [<List of financial strengths>],
         "cons": [<List of financial weaknesses>]
         }}
     }}
     """)
-    run_id = openai_helper.send_message_to_assistant(thread_id, query, assistant_type="summarizing")
+    print("SENDING VERDICT MESSAGE")
+    openai_helper.send_message(thread_id, query)
 
     # Retrieve response
-    response = openai_helper.get_assistant_verdict(thread_id, run_id)
-    return response
+    print("CREATING VERDICT RUN")
+    run = openai_helper.run_thread_until_success(thread_id, "summarizing")
+    return openai_helper.get_message_from_run(thread_id, run, "summarizing")
 
-def query_for_balance(thread_ids):
+
+def query_for_balance(thread_id):
     single_page_query = ("""
        Respond with a JSON list of every balance found in the bank statement in the format ({date}, {balance}). 
        Look at every single transaction in the included table. Only respond with this list. Do not respond with anything else. If this provided PDF 
        does not have a balance sheet, simply respond with an empty list in the "balances" field. 
 
+        ### Important Instructions:
+        - **Do NOT include citations, footnotes, or source markers (e.g.,  ) in your - **Only return a CLEAN JSON object without any additional formatting.**
+        - **Ignore entries in the statement not explicitly in a "Balance" or "Balances" column. For example, don't include 
+        information in an "Amounts" column.**
+        - **If you see an OVERALL balance at the start of the document, ignore. Look only for numbers under a column with 
+        the word "Balance".**
        ### **Output Format (Replace <transaction date>, and <balance on transaction date> and Populate Data Correctly)**
        {
            "balances": [
-                   { "date": "<transaction date>", "balance": <balance on transaction date> },
-                   { "date": "<transaction date>", "balance": <balance on transaction date> }
+                   { "date": "<transaction date in DAY-MONTH NAME-YEAR>", "balance": <balance on transaction date> },
+                   { "date": "<transaction date in DAY-MONTH NAME-YEAR>", "balance": <balance on transaction date> }
                ]
        }
 
        Ensure the response is a properly formatted JSON string that can be processed with `json.loads(output)`. No additional text, explanations, or formatting should be included in the response.
        """)
 
-    # Send message to all the threads
-    threads_to_run_ids = {}
-    for thread in thread_ids:
-        threads_to_run_ids[thread] = openai_helper.send_message_to_assistant(thread, single_page_query,
-                                                                             assistant_type="balancing")
+    # Send message to the thread
+    print("SENDING MESSAGE")
+    openai_helper.send_message(thread_id, single_page_query)
 
-    # Poll on all the threads
-    responses = []
-    page_num = 1
-    areAllDone = False
-    while not areAllDone:
-        areAllDone = True
-        for thread_id in threads_to_run_ids.keys():
-            run_id = threads_to_run_ids[thread_id]
-            run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run_id)
-            if run.status == "failed" or run.status == "cancelling" or run.status == "cancelled" or run.status == "expired" or run.status == "requires_action":
-                print("RESTARTING RUN")
-                # Cancel run and restart
-                client.beta.threads.runs.cancel(thread_id=thread_id, run_id=run_id)
-                threads_to_run_ids[thread_id] = openai_helper.send_message_to_assistant(thread, single_page_query,
-                                                                             assistant_type="balancing")
-            if run.status != "completed":
-                areAllDone = False
-            else:
-                print("RUN COMPLETED")
-        time.sleep(5)
+    # Run and poll until successful message
+    print("CREATING RUN")
+    run = openai_helper.run_thread_until_success(thread_id, "balancing")
 
-    page_num = 1
-    for thread_id in threads_to_run_ids.keys():
-        print(f"NOW READING RESPONSE PAGE {page_num}")
-        run_id = threads_to_run_ids[thread_id]
-        response = openai_helper.get_assistant_verdict(thread_id, run_id)
-        print(response)
-        responses.append(response)
-        page_num += 1
+    # Get message
+    return openai_helper.get_message_from_run(thread_id, run, "balancing")
 
-    # Combine all dictionaries
-    merged_balances = {"balances": []}
-    for response in responses:
-        if "balances" in response:
-            merged_balances["balances"].extend(response["balances"])
-    return merged_balances

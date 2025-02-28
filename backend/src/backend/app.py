@@ -104,7 +104,15 @@ def upload_files():
 
     print("QUERY FOR VERDICT")
     # Query for verdict
-    response = utils.query_for_verdict(file_id)
+    thread_id = openai_helper.create_openai_thread()
+    if not thread_id:
+        return jsonify({"error": "Failed to create OpenAI thread"}), 500
+    file_attachment_error = openai_helper.attach_file_to_thread(thread_id, file_id)
+
+    if file_attachment_error:
+        return jsonify({"error": file_attachment_error}), 500
+
+    response = utils.query_for_verdict(thread_id)
     if response["valid_documents"] == False:
         return jsonify({"error": response["reason"]}), 400
 
@@ -125,45 +133,112 @@ def upload_files():
     thread_ids = [utils.create_thread() for _ in page_ids]
 
     # Attach media to all the threads
+    print("ATTACHING MEDIA TO THREADS")
     for thread, page_id in zip(thread_ids, page_ids):
         utils.attach_media(thread, page_id)
 
-    merged_balances = utils.query_for_balance(thread_ids)
+    # Get balances
+    print("GETTING BALANCES")
+    balances = [utils.query_for_balance(thread_id) for thread_id in thread_ids]
+
+    # Merge balances
+    merged_balances = {"balances": []}
+    for response in balances:
+        if "balances" in response:
+            merged_balances["balances"].extend(response["balances"])
     print(merged_balances)
     print("MERGED BALANCES")
     # Store the combined results in the database
     lendee.balance_json = json.dumps(merged_balances)
     db.session.commit()
 
+    # Clean up file uploads for single page files on OpenAI
+    for page_id in page_ids:
+        openai_helper.delete_openai_file(page_id)
+
     return jsonify({
         "message": "Files uploaded successfully!"
     }), 201
 csrf.exempt(upload_files)
 
-@app.route("/get_verdict", methods=["POST"])
-def get_verdict():
+@app.route("/ask_question", methods=["POST"])
+def ask_question():
+    """Allows users to ask a question and get an answer from the assistant."""
+    data = request.json
+    lendee_name = data.get("lendee_name")
+    question = data.get("question")
+
+    if not lendee_name or not question:
+        return jsonify({"error": "Both lendee_name and question are required"}), 400
+
+    lendee = Lendee.query.filter_by(name=lendee_name).first()
+
+    if not lendee:
+        return jsonify({"error": "Lendee not found"}), 404
+
+    # Ensure the lendee has an associated bank statement
+    if not lendee.bank_statement:
+        return jsonify({"error": "No bank statement found for this lendee"}), 404
+
+    # Retrieve the file_id of the associated bank statement
+    file_id = lendee.bank_statement.file_id
+
+    # If no thread exists for Q&A, create a new one and store it
+    if not lendee.interactive_thread_id:
+        thread_id = openai_helper.create_openai_thread()
+        lendee.interactive_thread_id = thread_id
+        db.session.commit()
+    else:
+        thread_id = lendee.interactive_thread_id  # Use the existing thread
+
+    print("ATTACHING BANK STATEMENT TO THREAD")
+    utils.attach_media(thread_id, file_id)  # Attach bank statement to thread
+
+    print("SENDING MESSAGE")
+    openai_helper.send_message(thread_id, question)
+
+    # Run and poll until successful message
+    print("CREATING RUN")
+    run = openai_helper.run_thread_until_success(thread_id, "summarizing")
+
+    # Get message
+    return openai_helper.get_message_from_interactive_run(thread_id, run)
+csrf.exempt(ask_question)
+
+@app.route("/clear_thread", methods=["POST"])
+def clear_thread():
+    """Clears all messages for a given lendee's assistant thread by deleting and recreating the thread."""
     data = request.json
     lendee_name = data.get("lendee_name")
 
     if not lendee_name:
-        return jsonify({"error": "Missing lendee name"}), 400
+        return jsonify({"error": "lendee_name is required"}), 400
 
     lendee = Lendee.query.filter_by(name=lendee_name).first()
 
-    if not utils.check_user_and_statements(lendee_name):
-        return jsonify({"error": "User not found or no bank statements available"}), 404
+    if not lendee:
+        return jsonify({"error": "Lendee not found"}), 404
 
-    response = utils.query_for_verdict(lendee_name)
-    if response["valid_documents"] == False:
-        return jsonify({"error": response["reason"]}), 400
+    if not lendee.interactive_thread_id:
+        return jsonify({"error": "No existing thread found for this lendee"}), 404
 
-    # Store verdict in database
-    lendee.verdict_json = json.dumps(response["pros_cons"])
+    # Step 1: Delete the existing thread from OpenAI
+    thread_id = lendee.interactive_thread_id
+    delete_success = openai_helper.delete_thread(thread_id)
+
+    if not delete_success:
+        return jsonify({"error": "Failed to delete the existing thread"}), 500
+
+    # Step 2: Create a new thread and update the database
+    new_thread_id = openai_helper.create_openai_thread()
+    lendee.interactive_thread_id = new_thread_id
     db.session.commit()
 
-    return response["pros_cons"], 200
-csrf.exempt(get_verdict)
-
+    return jsonify({
+        "message": "Thread cleared successfully",
+        "new_thread_id": new_thread_id
+    }), 200
+csrf.exempt(clear_thread)
 @app.route("/lendees/<string:lendee_name>", methods=["GET"])
 def get_lendee_data(lendee_name):
     """Retrieve all stored information for a given lendee."""
