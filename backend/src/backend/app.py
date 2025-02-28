@@ -237,7 +237,7 @@ def clear_thread():
 
     # Step 1: Delete the existing thread from OpenAI
     thread_id = lendee.interactive_thread_id
-    delete_success = openai_helper.delete_thread(thread_id)
+    delete_success = openai_helper.delete_assistant_thread(thread_id)
 
     if not delete_success:
         return jsonify({"error": "Failed to delete the existing thread"}), 500

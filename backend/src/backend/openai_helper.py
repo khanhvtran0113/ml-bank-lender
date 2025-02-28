@@ -215,7 +215,7 @@ def delete_openai_file(file_id):
 def delete_assistant_thread(thread_id):
     """Deletes an OpenAI Assistant thread"""
     url = f"https://api.openai.com/v1/threads/{thread_id}"
-    headers = {"Authorization": f"Bearer {openai.api_key}"}
+    headers = {"Authorization": f"Bearer {openai.api_key}","OpenAI-Beta": "assistants=v2" }
 
     response = requests.delete(url, headers=headers)
 
