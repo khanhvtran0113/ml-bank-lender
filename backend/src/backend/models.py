@@ -27,3 +27,11 @@ class BankStatement(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     filename = db.Column(db.String(255), nullable=False)
     file_id = db.Column(db.String(255), nullable=False)
+
+    def to_dict(self):
+        """Convert BankStatement object to a dictionary for API response."""
+        return {
+            "id": self.id,
+            "filename": self.filename,
+            "file_id": self.file_id
+        }
