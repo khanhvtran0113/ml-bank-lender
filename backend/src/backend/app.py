@@ -72,6 +72,19 @@ def get_all_bank_statements():
 
     return jsonify({"bank_statements": statements_data}), 200
 
+@app.route("/api/lendees", methods=["GET"])
+def list_lendees():
+    """Retrieve and return a list of all lendees."""
+    lendees = Lendee.query.all()
+
+    if not lendees:
+        return jsonify({"message": "No lendees found"}), 404
+
+    # Convert lendees to a JSON-compatible format
+    lendee_list = [lendee.to_dict() for lendee in lendees]
+
+    return jsonify({"lendees": lendee_list}), 200
+
 @app.route("/upload", methods=["POST"])
 def upload_files():
     # Get the uploaded file and lendee name
