@@ -2,6 +2,7 @@ import React from "react";
 import { useLendee } from "../hooks/useLendee";
 import { ProConCard } from "../components/ProConCard";
 import { BalanceGraph } from "../components/BalanceGraph";
+import { ChatDialog } from "../components/ChatDialog";
 
 export const OverviewPage = React.memo(() => {
   const { data: lendeeInfo } = useLendee("john");
@@ -24,6 +25,12 @@ export const OverviewPage = React.memo(() => {
           balances={lendeeInfo.balance_json.balances}
           currency={lendeeInfo.verdict_json.currency}
         />
+      </div>
+      <div>
+        <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-4xl pl-6 pb-12">
+          Want to know more? Enter your question below
+        </h2>
+        <ChatDialog />
       </div>
     </div>
   );
