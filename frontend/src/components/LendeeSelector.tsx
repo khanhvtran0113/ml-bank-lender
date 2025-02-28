@@ -1,3 +1,4 @@
+import React from "react";
 import {
   Select,
   SelectContent,
@@ -5,43 +6,47 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./Select";
+import { getLendees } from "../util/backend";
+import { useNavigate } from "react-router-dom";
 
-export function LendeeSelector() {
-  const data = [
-    {
-      value: "dress-shirt-striped",
-      label: "Striped Dress Shirt",
-    },
-    {
-      value: "relaxed-button-down",
-      label: "Relaxed Fit Button Down",
-    },
-    {
-      value: "slim-button-down",
-      label: "Slim Fit Button Down",
-    },
-    {
-      value: "dress-shirt-solid",
-      label: "Solid Dress Shirt",
-    },
-    {
-      value: "dress-shirt-check",
-      label: "Check Dress Shirt",
-    },
-  ];
+export const LendeeSelector = React.memo(
+  ({ setLendeeName }: { setLendeeName: (lendeeName: string) => void }) => {
+    const navigate = useNavigate();
 
-  return (
-    <Select>
-      <SelectTrigger>
-        <SelectValue placeholder="Select" />
-      </SelectTrigger>
-      <SelectContent>
-        {data.map((item) => (
-          <SelectItem key={item.value} value={item.value}>
-            {item.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
+    const [lendees, setLendees] = React.useState<string[]>([]);
+
+    React.useEffect(() => {
+      getLendees().then((response: any) => {
+        if (response != null) {
+          const internalLendees = response.lendees;
+          setLendees(
+            internalLendees.map((internalLendee: any) => internalLendee.name)
+          );
+        }
+      });
+    }, []);
+
+    const handleLendeeSelect = React.useCallback(
+      (lendeeName: string) => {
+        setLendeeName(lendeeName);
+        navigate("/overview");
+      },
+      [navigate, setLendeeName]
+    );
+
+    return (
+      <Select onValueChange={handleLendeeSelect}>
+        <SelectTrigger>
+          <SelectValue placeholder="Select" />
+        </SelectTrigger>
+        <SelectContent>
+          {lendees.map((lendee: string) => (
+            <SelectItem key={lendee} value={lendee}>
+              {lendee}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
+);

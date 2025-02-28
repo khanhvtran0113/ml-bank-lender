@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { MockBackend } from "../MockBackend";
 import * as chrono from "chrono-node";
+import { getLendeeInfo } from "../util/backend";
 
 export type Balance = {
   balance: number;
@@ -27,9 +27,8 @@ export const useLendee = (lendee_name: string) =>
   useQuery({
     queryKey: ["lendee", lendee_name],
     queryFn: async () => {
-      const mockBackend = new MockBackend();
       try {
-        const response: any = await mockBackend.lendees(lendee_name);
+        const response: any = await getLendeeInfo(lendee_name);
         return sanitizeLendeeData(response);
       } catch (e: any) {
         console.warn(e);
