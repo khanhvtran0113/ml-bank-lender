@@ -19,6 +19,7 @@ import {
   YAxis,
 } from "recharts";
 import { AxisDomain } from "recharts/types/util/types";
+import * as d3 from "d3";
 
 import {
   AvailableChartColors,
@@ -604,6 +605,7 @@ interface ComboChartProps extends React.HTMLAttributes<HTMLDivElement> {
   lineSeries?: ChartSeries & {
     connectNulls?: boolean;
   };
+  yAxisLabel: string;
 }
 
 const ComboChart = React.forwardRef<HTMLDivElement, ComboChartProps>(
@@ -611,10 +613,9 @@ const ComboChart = React.forwardRef<HTMLDivElement, ComboChartProps>(
     const defaultSeries = {
       categories: [],
       colors: AvailableChartColors,
-      valueFormatter: (value: number) => value.toString(),
+      valueFormatter: (value: number) => value.toLocaleString(),
       showYAxis: true,
       yAxisWidth: 56,
-      yAxisLabel: undefined,
       allowDecimals: true,
       type: "default",
       autoMinValue: false,
@@ -634,7 +635,6 @@ const ComboChart = React.forwardRef<HTMLDivElement, ComboChartProps>(
       startEndOnly = false,
       showXAxis = true,
       showGridLines = true,
-      intervalType = "equidistantPreserveStart",
       showTooltip = true,
       showLegend = true,
       legendPosition = "right",
@@ -779,6 +779,26 @@ const ComboChart = React.forwardRef<HTMLDivElement, ComboChartProps>(
       }
     }
 
+    const xScale = d3
+      .scaleLinear<number, number>()
+      .domain([
+        Math.min(...data.map((d) => d.value)),
+        Math.max(...data.map((d) => d.value)),
+      ]) // Min and Max of data values
+      .range([0, 500]); // The range of the scale (e.g., pixel width of the chart)
+
+    const xAxisProps = {
+      dataKey: "value", // The data key to use for X-axis values
+      type: "number" as const, // Correct type for numeric data
+      domain: ["auto", "auto"], // Automatically scale the axis based on the data
+      scale: xScale, // Use the custom scale we defined above
+      tick: ({ x, y, payload }: any) => (
+        <text x={x} y={y + 10} textAnchor="middle" fill="#666" fontSize={12}>
+          {payload.value}
+        </text>
+      ), // Custom tick rendering
+    };
+
     return (
       <div
         ref={forwardedRef}
@@ -801,8 +821,8 @@ const ComboChart = React.forwardRef<HTMLDivElement, ComboChartProps>(
             }
             margin={{
               bottom: xAxisLabel ? 30 : undefined,
-              left: mergedBarSeries.yAxisLabel ? 20 : undefined,
-              right: mergedLineSeries.yAxisLabel ? 20 : undefined,
+              left: props.yAxisLabel ? 20 : undefined,
+              right: props.yAxisLabel ? 20 : undefined,
               top: 5,
             }}
           >
@@ -834,12 +854,22 @@ const ComboChart = React.forwardRef<HTMLDivElement, ComboChartProps>(
                 right: paddingValue,
               }}
               dataKey={index}
-              interval={startEndOnly ? "preserveStartEnd" : intervalType}
               ticks={
                 startEndOnly
                   ? [data[0][index], data[data.length - 1][index]]
                   : undefined
               }
+              scale={"linear"}
+              type="number"
+              tickFormatter={(value) =>
+                new Date(value).toLocaleDateString("en-US", {
+                  month: "numeric",
+                  day: "numeric",
+                  year: "numeric",
+                })
+              }
+              domain={[Math.min(...data.map((d) => d[index])), "auto"]}
+              interval={Math.floor(data.length / 10)} // Show roughly 10 ticks
             >
               {xAxisLabel && (
                 <Label
@@ -873,7 +903,7 @@ const ComboChart = React.forwardRef<HTMLDivElement, ComboChartProps>(
               tickFormatter={mergedBarSeries.valueFormatter}
               allowDecimals={mergedBarSeries.allowDecimals}
             >
-              {mergedBarSeries.yAxisLabel && (
+              {props.yAxisLabel && (
                 <Label
                   position="insideLeft"
                   style={{ textAnchor: "middle" }}
@@ -881,7 +911,7 @@ const ComboChart = React.forwardRef<HTMLDivElement, ComboChartProps>(
                   offset={-15}
                   className="fill-gray-800 text-sm font-medium dark:fill-gray-200"
                 >
-                  {mergedBarSeries.yAxisLabel}
+                  {props.yAxisLabel}
                 </Label>
               )}
             </YAxis>
@@ -910,7 +940,7 @@ const ComboChart = React.forwardRef<HTMLDivElement, ComboChartProps>(
                 tickFormatter={mergedLineSeries.valueFormatter}
                 allowDecimals={mergedLineSeries.allowDecimals}
               >
-                {mergedLineSeries.yAxisLabel && (
+                {props.yAxisLabel && (
                   <Label
                     position="insideRight"
                     style={{ textAnchor: "middle" }}
@@ -918,7 +948,7 @@ const ComboChart = React.forwardRef<HTMLDivElement, ComboChartProps>(
                     offset={-15}
                     className="fill-gray-800 text-sm font-medium dark:fill-gray-200"
                   >
-                    {mergedLineSeries.yAxisLabel}
+                    {props.yAxisLabel}
                   </Label>
                 )}
               </YAxis>
@@ -1017,7 +1047,7 @@ const ComboChart = React.forwardRef<HTMLDivElement, ComboChartProps>(
                 )}
                 key={category}
                 name={category}
-                type="linear"
+                type="step"
                 dataKey={category}
                 stackId={stacked ? "stack" : undefined}
                 isAnimationActive={false}
@@ -1032,12 +1062,13 @@ const ComboChart = React.forwardRef<HTMLDivElement, ComboChartProps>(
             {onValueChange
               ? mergedLineSeries.categories.map((category) => (
                   <Line
+                    xAxis={xAxisProps}
                     yAxisId={enableBiaxial ? "right" : undefined}
                     className={cx("cursor-pointer")}
                     strokeOpacity={0}
                     key={category}
                     name={category}
-                    type="linear"
+                    type="stepAfter"
                     dataKey={category}
                     stroke="transparent"
                     fill="transparent"
@@ -1055,6 +1086,8 @@ const ComboChart = React.forwardRef<HTMLDivElement, ComboChartProps>(
               : null}
             {mergedLineSeries.categories.map((category) => (
               <Line
+                type="stepAfter"
+                xAxis={xAxisProps}
                 yAxisId={enableBiaxial ? "right" : undefined}
                 className={cx(
                   getColorClassName(
@@ -1099,6 +1132,7 @@ const ComboChart = React.forwardRef<HTMLDivElement, ComboChartProps>(
                       stroke={stroke}
                       strokeLinecap={strokeLinecap}
                       strokeLinejoin={strokeLinejoin}
+                      type="linear"
                       strokeWidth={strokeWidth}
                       onClick={(_, event) => onDotClick(props, event)}
                     />
@@ -1153,7 +1187,6 @@ const ComboChart = React.forwardRef<HTMLDivElement, ComboChartProps>(
                 }}
                 key={`${category}-line-id`}
                 name={category}
-                type="linear"
                 dataKey={category}
                 stroke=""
                 strokeWidth={2}

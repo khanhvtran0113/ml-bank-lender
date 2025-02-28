@@ -1,7 +1,7 @@
 import React from "react";
 import { useLendee } from "../hooks/useLendee";
 import { ProConCard } from "../components/ProConCard";
-import { ComboChartCustomTooltipExample } from "../components/Balance";
+import { BalanceGraph } from "../components/BalanceGraph";
 
 export const OverviewPage = React.memo(() => {
   const { data: lendeeInfo } = useLendee("john");
@@ -20,7 +20,10 @@ export const OverviewPage = React.memo(() => {
         <ProConCard points={lendeeInfo.verdict_json.cons} isPro={false} />
       </div>
       <div className="p-12 m-auto">
-        <ComboChartCustomTooltipExample />
+        <BalanceGraph
+          balances={lendeeInfo.balance_json.balances}
+          currency={lendeeInfo.verdict_json.currency}
+        />
       </div>
     </div>
   );

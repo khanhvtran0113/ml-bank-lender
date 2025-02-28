@@ -9,7 +9,7 @@ function classNames(...classes: any) {
 export const ProConCard = React.memo(
   ({ points, isPro }: { points: string[]; isPro: boolean }) => {
     return (
-      <div className="flex px-12">
+      <div className="flex px-12 w-[700px] mx-auto">
         {/* bg-gray-950 used as color to match underlying dark mode background color */}{" "}
         <div
           className={classNames(
